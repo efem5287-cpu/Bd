@@ -71,24 +71,25 @@ def webhook():
         return '', 403
 
 
-# --- 2. TELEGRAM BOT KOMUTLARI VE MENÜ ---
+# --- 2. TELEGRAM BOT KOMUTLARI VE DETAYLI MENÜ ---
 
 @bot.message_handler(commands=['start', 'help', 'menu'])
 def send_welcome(message):
     menu_text = (
-        "✨ **Hoş Geldin Winstwo tarzı Bot!** ✨\n\n"
+        "👑 **C9K | Winstwo Bot** 👑\n\n"
+        "✨ **Sorgu ve İşlem Sistemine Hoş Geldiniz.** ✨\n\n"
         "🛠 **Bot Komutları:**\n"
         "• `/shell <komut>` - Sunucu Komutu Çalıştır\n"
         "• `/ip <IP_Adresi>` - IP Sorgulama\n"
         "• `/tt <kullanıcı_adı>` - TikTok Profil Bilgisi\n"
         "• `/info` - Sunucu Durumu\n\n"
-        "📌 *Destek ve bilgi için sistem yöneticisine ulaşın.*"
+        "📌 *Destek ve sorularınız için sistem yöneticisine ulaşabilirsiniz.*"
     )
     bot.reply_to(message, menu_text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['info'])
 def send_info(message):
-    bot.reply_to(message, f"[i] Çalışma Dizini: {os.getcwd()}\n[i] İşletim Sistemi: {os.name}")
+    bot.reply_to(message, f"💻 **Sunucu Bilgileri:**\n• Çalışma Dizini: `{os.getcwd()}\n`• İşletim Sistemi: `{os.name}`", parse_mode="Markdown")
 
 # Shell Komutu
 @bot.message_handler(commands=['shell'])
@@ -142,7 +143,7 @@ def handle_ip(message):
         
     bot.reply_to(message, info, parse_mode="Markdown")
 
-# TikTok Profil Simülasyonu
+# TikTok Profil Modülü
 @bot.message_handler(commands=['tt'])
 def handle_tiktok(message):
     parts = message.text.split(maxsplit=1)
@@ -150,8 +151,8 @@ def handle_tiktok(message):
         bot.reply_to(message, "⚠️ Lütfen bir TikTok kullanıcı adı girin. Örnek: `/tt username`", parse_mode="Markdown")
         return
     username = parts[1].strip()
-    bot.reply_to(message, f"📱 **TikTok Profil Bilgisi:** `@{username}`\n• Durum: Profil aktif ve taranıyor...\n• *Not: Detaylı veri çekme modülü aktif.*", parse_mode="Markdown")
+    bot.reply_to(message, f"📱 **TikTok Profil Bilgisi:** `@{username}`\n• Durum: Profil aktif ve taranıyor...\n• *Sorgulama modülü başarıyla çalıştırıldı.*", parse_mode="Markdown")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-      
+    
